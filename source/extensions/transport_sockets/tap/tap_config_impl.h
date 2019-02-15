@@ -26,9 +26,11 @@ private:
   envoy::data::tap::v2alpha::SocketEvent& createEvent();
 
   SocketTapConfigImplSharedPtr config_;
+  Extensions::Common::Tap::TapConfigBaseImpl::PerTapSinkHandleManagerPtr sink_handle_;
   const Network::Connection& connection_;
-  std::vector<bool> statuses_;
-  std::shared_ptr<envoy::data::tap::v2alpha::BufferedTraceWrapper> trace_;
+  Extensions::Common::Tap::Matcher::MatchStatusVector statuses_;
+  // Must be a shared_ptr because of submitTrace().
+  std::shared_ptr<envoy::data::tap::v2alpha::TraceWrapper> trace_;
   uint32_t rx_bytes_buffered_{};
   uint32_t tx_bytes_buffered_{};
 };

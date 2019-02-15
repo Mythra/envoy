@@ -28,8 +28,9 @@ using HttpTapConfigImplSharedPtr = std::shared_ptr<HttpTapConfigImpl>;
 class HttpPerRequestTapperImpl : public HttpPerRequestTapper, Logger::Loggable<Logger::Id::tap> {
 public:
   HttpPerRequestTapperImpl(HttpTapConfigImplSharedPtr config, uint64_t stream_id)
-      : config_(std::move(config)), stream_id_(stream_id), statuses_(config_->numMatchers()),
-        trace_(std::make_shared<envoy::data::tap::v2alpha::BufferedTraceWrapper>()) {
+      : config_(std::move(config)), sink_handle_(config_->createPerTapSinkHandleManager(stream_id)),
+        statuses_(config_->numMatchers()),
+        trace_(std::make_shared<envoy::data::tap::v2alpha::TraceWrapper>()) {
     config_->rootMatcher().onNewStream(statuses_);
   }
 
@@ -46,10 +47,10 @@ public:
 
 private:
   HttpTapConfigImplSharedPtr config_;
-  const uint64_t stream_id_;
-  std::vector<bool> statuses_;
-  // Must be a shared_ptr because of submitBufferedTrace().
-  std::shared_ptr<envoy::data::tap::v2alpha::BufferedTraceWrapper> trace_;
+  Extensions::Common::Tap::TapConfigBaseImpl::PerTapSinkHandleManagerPtr sink_handle_;
+  Extensions::Common::Tap::Matcher::MatchStatusVector statuses_;
+  // Must be a shared_ptr because of submitTrace().
+  std::shared_ptr<envoy::data::tap::v2alpha::TraceWrapper> trace_;
 };
 
 } // namespace TapFilter

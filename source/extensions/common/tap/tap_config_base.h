@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fstream>
+
 #include "envoy/buffer/buffer.h"
 #include "envoy/service/tap/v2alpha/common.pb.h"
 
@@ -58,13 +60,29 @@ public:
  */
 class TapConfigBaseImpl {
 public:
+  // A wrapper for a per tap sink handle and trace submission. If in the future we support
+  // multiple sinks we can easily do it here.
+  class PerTapSinkHandleManager {
+  public:
+    PerTapSinkHandleManager(TapConfigBaseImpl& parent, uint64_t trace_id)
+        : parent_(parent), handle_(parent.sink_to_use_->createPerTapSinkHandle(trace_id)) {}
+
+    void submitTrace(const std::shared_ptr<envoy::data::tap::v2alpha::TraceWrapper>& trace);
+
+  private:
+    TapConfigBaseImpl& parent_;
+    PerTapSinkHandlePtr handle_;
+  };
+
+  using PerTapSinkHandleManagerPtr = std::unique_ptr<PerTapSinkHandleManager>;
+
+  PerTapSinkHandleManagerPtr createPerTapSinkHandleManager(uint64_t trace_id) {
+    return std::make_unique<PerTapSinkHandleManager>(*this, trace_id);
+  }
   uint32_t maxBufferedRxBytes() const { return max_buffered_rx_bytes_; }
   uint32_t maxBufferedTxBytes() const { return max_buffered_tx_bytes_; }
   size_t numMatchers() const { return matchers_.size(); }
   Matcher& rootMatcher() const;
-  void
-  submitBufferedTrace(const std::shared_ptr<envoy::data::tap::v2alpha::BufferedTraceWrapper>& trace,
-                      uint64_t trace_id);
 
 protected:
   TapConfigBaseImpl(envoy::service::tap::v2alpha::TapConfig&& proto_config,
@@ -91,12 +109,24 @@ public:
   FilePerTapSink(const envoy::service::tap::v2alpha::FilePerTapSink& config) : config_(config) {}
 
   // Sink
-  void
-  submitBufferedTrace(const std::shared_ptr<envoy::data::tap::v2alpha::BufferedTraceWrapper>& trace,
-                      envoy::service::tap::v2alpha::OutputSink::Format format,
-                      uint64_t trace_id) override;
+  PerTapSinkHandlePtr createPerTapSinkHandle(uint64_t trace_id) override {
+    return std::make_unique<FilePerTapSinkHandle>(*this, trace_id);
+  }
 
 private:
+  struct FilePerTapSinkHandle : public PerTapSinkHandle {
+    FilePerTapSinkHandle(FilePerTapSink& parent, uint64_t trace_id)
+        : parent_(parent), trace_id_(trace_id) {}
+
+    // PerTapSinkHandle
+    void submitTrace(const std::shared_ptr<envoy::data::tap::v2alpha::TraceWrapper>& trace,
+                     envoy::service::tap::v2alpha::OutputSink::Format format) override;
+
+    FilePerTapSink& parent_;
+    const uint64_t trace_id_;
+    std::ofstream output_file_;
+  };
+
   const envoy::service::tap::v2alpha::FilePerTapSink config_;
 };
 
